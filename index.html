@@ -22,7 +22,56 @@
     display: flex;
     gap: 0;
     margin-top: 10px;
+    align-items: stretch;
   }
+  /* ── Evaluation Bar ── */
+  #eval-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-right: 6px;
+    position: relative;
+    height: 560px;
+  }
+  #eval-bar {
+    width: 28px;
+    height: 520px;
+    background: #1a1b26;
+    border: 2px solid #3a3530;
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  #eval-fill {
+    width: 100%;
+    background: linear-gradient(to top, #f0f0f0, #d4d4d4);
+    transition: height 0.5s ease;
+    border-radius: 0 0 4px 4px;
+  }
+  #eval-score {
+    font-size: 11px;
+    font-weight: 700;
+    color: #d2aa6e;
+    margin-top: 4px;
+    font-family: monospace;
+    text-align: center;
+    width: 50px;
+  }
+  /* ── Sound Toggle ── */
+  #sound-toggle {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    background: none;
+    border: none;
+    font-size: 18px;
+    cursor: pointer;
+    opacity: 0.6;
+    z-index: 10;
+  }
+  #sound-toggle:hover { opacity: 1; }
   #board-area { position: relative; }
   #board {
     display: grid;
@@ -81,6 +130,63 @@
     color: #8a8580;
     pointer-events: none;
   }
+  /* ── Piece Animation ── */
+  .piece-animate {
+    position: absolute;
+    z-index: 100;
+    transition: left 0.25s ease, top 0.25s ease;
+    pointer-events: none;
+  }
+  .sq.animating { opacity: 0; }
+  /* ── Analysis Overlay ── */
+  #analysis-overlay {
+    display: none;
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 700;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+  }
+  #analysis-overlay.active { display: flex; }
+  #analysis-box {
+    background: #2c2825;
+    border: 2px solid #d2aa6e;
+    border-radius: 12px;
+    padding: 24px 32px;
+    max-width: 700px;
+    width: 90%;
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  #analysis-box h2 { color: #d2aa6e; font-family: Georgia, serif; margin-bottom: 12px; }
+  .analysis-controls { display: flex; gap: 8px; margin-bottom: 16px; align-items: center; }
+  .analysis-controls .btn { flex: none; padding: 6px 16px; }
+  .analysis-controls span { color: #9e9890; font-size: 13px; min-width: 80px; text-align: center; }
+  .analysis-eval-bar {
+    width: 20px; height: 300px; background: #1a1b26; border: 1px solid #3a3530;
+    border-radius: 4px; overflow: hidden; display: flex; flex-direction: column-reverse;
+  }
+  .analysis-eval-fill { width: 100%; background: linear-gradient(to top, #f0f0f0, #d4d4d4); transition: height 0.3s; }
+  .analysis-eval-score { color: #d2aa6e; font-size: 14px; font-weight: 700; font-family: monospace; }
+  .analysis-board-area { display: flex; gap: 12px; align-items: center; }
+  #analysis-board {
+    display: grid; grid-template-columns: repeat(8, 50px); grid-template-rows: repeat(8, 50px);
+    border: 2px solid #3a3530; border-radius: 4px;
+  }
+  #analysis-board .sq { width: 50px; height: 50px; font-size: 30px; }
+  .analysis-moves {
+    margin-top: 16px;
+    display: flex; flex-wrap: wrap; gap: 4px;
+  }
+  .analysis-move {
+    padding: 3px 8px; border-radius: 4px; font-size: 12px; font-family: monospace;
+    background: #383430; color: #c9d1d9; cursor: pointer; transition: background 0.15s;
+  }
+  .analysis-move:hover { background: #504a44; }
+  .analysis-move.current { background: #d2aa6e; color: #1a1816; font-weight: 700; }
+  .analysis-move.blunder { border: 2px solid #eb4040; }
+  .analysis-move.great { border: 2px solid #2ea043; }
   /* Sidebar */
   #sidebar {
     width: 200px;
@@ -200,7 +306,12 @@
 </head>
 <body>
 <div id="game-container">
+  <div id="eval-area">
+    <div id="eval-bar"><div id="eval-fill" style="height:50%"></div></div>
+    <div id="eval-score">0.0</div>
+  </div>
   <div id="board-area">
+    <button id="sound-toggle" onclick="toggleSound()" title="Toggle sound">🔊</button>
     <div id="board"></div>
   </div>
   <div id="sidebar">
@@ -212,6 +323,7 @@
     <div id="move-list"></div>
     <button class="btn" onclick="newGame()">New Game</button>
     <button class="btn" onclick="undoMove()">Undo Move</button>
+    <button class="btn" onclick="flipBoard()" id="flip-btn">🔄 Flip Board</button>
     <div id="depth-row">
       <label>AI Depth:</label>
       <button class="depth-btn" onclick="setDepth(2)">2</button>
@@ -228,11 +340,35 @@
   </div>
 </div>
 
+<div id="analysis-overlay">
+  <div id="analysis-box">
+    <h2>📊 Game Analysis</h2>
+    <div class="analysis-controls">
+      <button class="btn" onclick="analysisFirst()">⏮</button>
+      <button class="btn" onclick="analysisPrev()">◀</button>
+      <span id="analysis-info">Move 0 / 0</span>
+      <button class="btn" onclick="analysisNext()">▶</button>
+      <button class="btn" onclick="analysisLast()">⏭</button>
+      <button class="btn" onclick="closeAnalysis()">✕ Close</button>
+    </div>
+    <div class="analysis-board-area">
+      <div class="analysis-eval-bar"><div class="analysis-eval-fill" id="analysis-eval-fill" style="height:50%"></div></div>
+      <div>
+        <div class="analysis-eval-score" id="analysis-eval-score">0.0</div>
+        <div id="analysis-board"></div>
+      </div>
+    </div>
+    <div class="analysis-moves" id="analysis-moves"></div>
+  </div>
+</div>
 <div id="gameover-overlay">
   <div id="gameover-box">
     <h2 id="gameover-title"></h2>
     <p>Click New Game to play again</p>
-    <button class="btn" onclick="newGame(); closeGameOver();">New Game</button>
+    <div style="display:flex;gap:8px;justify-content:center;">
+      <button class="btn" onclick="newGame(); closeGameOver();">New Game</button>
+      <button class="btn" onclick="closeGameOver(); startAnalysis();" style="background:#d2aa6e;color:#1a1816;">📊 Analyze Game</button>
+    </div>
   </div>
 </div>
 
@@ -584,39 +720,291 @@ let dragFrom = null;
 const FILES_LABELS = 'abcdefgh';
 const RANKS = '87654321';
 
-function renderBoard(){
-  const el = document.getElementById('board');
-  el.innerHTML='';
+// ── Sound Effects (Web Audio API) ──
+let audioCtx = null;
+let soundEnabled = true;
+let lastEval = 0;
+
+function getAudioCtx(){
+  if(!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function playTone(freq, duration, type, vol){
+  if(!soundEnabled) return;
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type || 'sine';
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    gain.gain.setValueAtTime(vol || 0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration);
+  } catch(e) {}
+}
+
+function playMoveSound(){ playTone(600, 0.08, 'sine', 0.12); }
+function playCaptureSound(){ playTone(300, 0.12, 'square', 0.1); setTimeout(()=>playTone(500, 0.1, 'sine', 0.1), 60); }
+function playCheckSound(){ playTone(800, 0.15, 'triangle', 0.15); setTimeout(()=>playTone(1000, 0.15, 'triangle', 0.12), 100); }
+function playCheckmateSound(){ [0,100,200,300].forEach((d,i)=>setTimeout(()=>playTone(400+i*150, 0.2, 'sine', 0.12), d)); }
+function playCastleSound(){ playTone(400, 0.08, 'sine', 0.1); setTimeout(()=>playTone(500, 0.08, 'sine', 0.1), 50); }
+
+function toggleSound(){
+  soundEnabled = !soundEnabled;
+  document.getElementById('sound-toggle').textContent = soundEnabled ? '🔊' : '🔇';
+}
+
+function playMoveSounds(move, boardBefore){
+  const isCapture = move.type.startsWith('cap') || move.type === 'ep';
+  const isCastle = move.type === 'castleK' || move.type === 'castleQ';
+  const wasCheck = boardBefore && boardBefore.inCheck(boardBefore.whiteTurn);
+
+  if(isCastle) playCastleSound();
+  else if(isCapture) playCaptureSound();
+  else playMoveSound();
+
+  // Check sound fires after the move is made
+  if(wasCheck) setTimeout(playCheckSound, 100);
+}
+
+// ── Evaluation Bar ──
+function updateEvalBar(evalScore){
+  lastEval = evalScore;
+  // Clamp to [-10, 10] for visual display
+  const clamped = Math.max(-10, Math.min(10, evalScore));
+  // Convert to percentage: 0 = equal, 100 = white winning, 0 = black winning
+  const pct = 50 + (clamped / 10) * 50;
+  const fill = document.getElementById('eval-fill');
+  const scoreEl = document.getElementById('eval-score');
+  if(fill) fill.style.height = pct + '%';
+  if(scoreEl){
+    if(Math.abs(evalScore) >= 90) scoreEl.textContent = evalScore > 0 ? 'M' : '-M';
+    else scoreEl.textContent = (evalScore > 0 ? '+' : '') + evalScore.toFixed(1);
+  }
+}
+
+function getEvalForBoard(b){
+  // Quick evaluation without full search
+  let score = 0;
+  const vals = {P:100,N:320,B:330,R:500,Q:900,K:20000};
   for(let r=0;r<8;r++) for(let c=0;c<8;c++){
+    const p = b.b[r][c];
+    if(p==='.') continue;
+    const v = vals[p.toUpperCase()] || 0;
+    if(isWhite(p)) score += v; else score -= v;
+  }
+  return score / 100;
+}
+
+// ── Board Flip ──
+let boardFlipped = false;
+function flipBoard(){
+  boardFlipped = !boardFlipped;
+  document.getElementById('flip-btn').textContent = boardFlipped ? '🔄 Flip Board' : '🔄 Flip Board';
+  selectedSq = null; legalForSelected = [];
+  renderBoard();
+}
+// Map logical (r,c) to display position based on flip state
+function displayRC(r, c){
+  return boardFlipped ? [7-r, 7-c] : [r, c];
+}
+function logicalRC(dr, dc){
+  return boardFlipped ? [7-dr, 7-dc] : [dr, dc];
+}
+
+// ── Piece Animation ──
+let animating = false;
+function animateMove(move, callback){
+  const boardEl = document.getElementById('board');
+  const sqSize = 50; // analysis uses 50, main uses 70
+  const fromDR = boardFlipped ? 7-move.fr : move.fr;
+  const fromDC = boardFlipped ? 7-move.fc : move.fc;
+  const toDR = boardFlipped ? 7-move.tr : move.tr;
+  const toDC = boardFlipped ? 7-move.tc : move.tc;
+  const fromX = fromDC * 70;
+  const fromY = fromDR * 70;
+  const toX = toDC * 70;
+  const toY = toDR * 70;
+  const piece = board.b[move.fr][move.fc];
+  if(piece === '.' || move.type === 'castleK' || move.type === 'castleQ'){
+    callback(); return; // skip animation for castling
+  }
+  // Create floating piece
+  const ghost = document.createElement('span');
+  ghost.className = 'piece-animate piece '+(isWhite(piece)?'white':'black');
+  ghost.textContent = UNICODE[piece];
+  ghost.style.left = fromX + 'px';
+  ghost.style.top = fromY + 'px';
+  ghost.style.fontSize = '44px';
+  boardEl.appendChild(ghost);
+  animating = true;
+  // Trigger animation
+  requestAnimationFrame(()=>{
+    ghost.style.left = toX + 'px';
+    ghost.style.top = toY + 'px';
+  });
+  setTimeout(()=>{
+    if(ghost.parentNode) ghost.parentNode.removeChild(ghost);
+    animating = false;
+    callback();
+  }, 260);
+}
+
+// ── Game Analysis ──
+let analysisBoard = null;
+let analysisMoveIndex = 0;
+let analysisEvals = [];
+let analysisMoves = [];
+
+function startAnalysis(){
+  if(moveHistory.length === 0) return;
+  // Rebuild all board states and evals
+  analysisBoard = new Board();
+  analysisMoves = [];
+  analysisEvals = [getEvalForBoard(analysisBoard)];
+  for(const [notation] of moveHistory){
+    const legal = analysisBoard.genLegal();
+    let found = null;
+    for(const m of legal){
+      if(analysisBoard.notation(m) === notation.replace(/[#]/g,'')){ found = m; break; }
+    }
+    if(found){
+      analysisBoard.makeMove(found);
+      analysisMoves.push(found);
+      analysisEvals.push(getEvalForBoard(analysisBoard));
+    }
+  }
+  // Mark blunders and great moves
+  analysisMoveIndex = analysisMoves.length; // start at end
+  document.getElementById('analysis-overlay').classList.add('active');
+  renderAnalysisBoard();
+  renderAnalysisMoveList();
+}
+
+function closeAnalysis(){
+  document.getElementById('analysis-overlay').classList.remove('active');
+  renderBoard();
+}
+
+function goToAnalysisMove(idx){
+  if(idx < 0 || idx > analysisMoves.length) return;
+  analysisMoveIndex = idx;
+  analysisBoard = new Board();
+  for(let i = 0; i < idx; i++){
+    analysisBoard.makeMove(analysisMoves[i]);
+  }
+  renderAnalysisBoard();
+  renderAnalysisMoveList();
+}
+
+function analysisFirst(){ goToAnalysisMove(0); }
+function analysisLast(){ goToAnalysisMove(analysisMoves.length); }
+function analysisPrev(){ goToAnalysisMove(analysisMoveIndex - 1); }
+function analysisNext(){ goToAnalysisMove(analysisMoveIndex + 1); }
+
+function renderAnalysisBoard(){
+  const el = document.getElementById('analysis-board');
+  el.innerHTML = '';
+  for(let r = 0; r < 8; r++) for(let c = 0; c < 8; c++){
     const sq = document.createElement('div');
     const isLight = (r+c)%2===0;
     sq.className = 'sq '+(isLight?'light':'dark');
-    sq.dataset.r=r; sq.dataset.c=c;
+    // Last move highlight in analysis
+    if(analysisMoveIndex > 0 && analysisMoveIndex <= analysisMoves.length){
+      const mv = analysisMoves[analysisMoveIndex - 1];
+      const [dfr, dfc] = displayRC(mv.fr, mv.fc);
+      const [dtr, dtc] = displayRC(mv.tr, mv.tc);
+      if((r===dfr&&c===dfc)||(r===dtr&&c===dtc)) sq.classList.add('last-move');
+    }
+    // Check highlight
+    if(analysisBoard.inCheck(analysisBoard.whiteTurn)){
+      const k = analysisBoard.findKing(analysisBoard.whiteTurn);
+      if(k){
+        const [dkr, dkc] = displayRC(k[0], k[1]);
+        if(r===dkr && c===dkc) sq.classList.add('check');
+      }
+    }
+    const p = analysisBoard.b[r][c];
+    if(p !== '.'){
+      const span = document.createElement('span');
+      span.className = 'piece '+(isWhite(p)?'white':'black');
+      span.textContent = UNICODE[p];
+      sq.appendChild(span);
+    }
+    el.appendChild(sq);
+  }
+  // Update eval display
+  const evalVal = analysisEvals[analysisMoveIndex] || 0;
+  const clamped = Math.max(-10, Math.min(10, evalVal));
+  const pct = 50 + (clamped / 10) * 50;
+  document.getElementById('analysis-eval-fill').style.height = pct + '%';
+  const scoreEl = document.getElementById('analysis-eval-score');
+  scoreEl.textContent = (evalVal > 0 ? '+' : '') + evalVal.toFixed(1);
+  document.getElementById('analysis-info').textContent = `Move ${analysisMoveIndex} / ${analysisMoves.length}`;
+}
 
-    // Highlights
+function renderAnalysisMoveList(){
+  const container = document.getElementById('analysis-moves');
+  container.innerHTML = '';
+  for(let i = 0; i < analysisMoves.length; i++){
+    const btn = document.createElement('span');
+    btn.className = 'analysis-move' + (i === analysisMoveIndex - 1 ? ' current' : '');
+    // Mark blunders (eval drop > 2) and great moves (eval gain > 1)
+    const evalBefore = analysisEvals[i];
+    const evalAfter = analysisEvals[i + 1];
+    const diff = analysisBoard.b[0]?.length ? (i % 2 === 0 ? evalAfter - evalBefore : evalBefore - evalAfter) : 0;
+    if(Math.abs(evalAfter - evalBefore) > 2) btn.classList.add('blunder');
+    else if(Math.abs(evalBefore - evalAfter) > 1.5 && i % 2 === 0) btn.classList.add('great');
+    const moveNum = Math.floor(i / 2) + 1;
+    const prefix = i % 2 === 0 ? moveNum + '.' : '';
+    btn.textContent = prefix + analysisMoves[i].notation ? prefix + (analysisBoard.notation ? '' : '') : '';
+    // Get notation from history
+    btn.textContent = (i % 2 === 0 ? (Math.floor(i/2)+1) + '.' : '   ') + (moveHistory[i] ? moveHistory[i][0] : '?');
+    const moveI = i;
+    btn.addEventListener('click', () => goToAnalysisMove(moveI + 1));
+    container.appendChild(btn);
+  }
+}
+
+function renderBoard(){
+  const el = document.getElementById('board');
+  el.innerHTML='';
+  for(let dr=0;dr<8;dr++) for(let dc=0;dc<8;dc++){
+    // Map display coords to logical board coords
+    const [lr, lc] = logicalRC(dr, dc);
+    const sq = document.createElement('div');
+    const isLight = (dr+dc)%2===0;
+    sq.className = 'sq '+(isLight?'light':'dark');
+    sq.dataset.r=lr; sq.dataset.c=lc;
+
+    // Highlights (compare with logical coords)
     if(lastMove){
-      if((lastMove.fr===r&&lastMove.fc===c)||(lastMove.tr===r&&lastMove.tc===c))
+      if((lastMove.fr===lr&&lastMove.fc===lc)||(lastMove.tr===lr&&lastMove.tc===lc))
         sq.classList.add('last-move');
     }
-    if(selectedSq&&selectedSq[0]===r&&selectedSq[1]===c)
+    if(selectedSq&&selectedSq[0]===lr&&selectedSq[1]===lc)
       sq.classList.add('selected');
 
     // Check highlight
     if(board.inCheck(board.whiteTurn)){
       const k=board.findKing(board.whiteTurn);
-      if(k&&k[0]===r&&k[1]===c) sq.classList.add('check');
+      if(k&&k[0]===lr&&k[1]===lc) sq.classList.add('check');
     }
 
     // Legal move indicators
     for(const m of legalForSelected){
-      if(m.tr===r&&m.tc===c){
-        if(board.b[r][c]!=='.'||m.type==='ep') sq.classList.add('legal-capture');
+      if(m.tr===lr&&m.tc===lc){
+        if(board.b[lr][lc]!=='.'||m.type==='ep') sq.classList.add('legal-capture');
         else sq.classList.add('legal-dot');
       }
     }
 
     // Piece
-    const p=board.b[r][c];
+    const p=board.b[lr][lc];
     if(p!=='.'){
       const span=document.createElement('span');
       span.className='piece '+(isWhite(p)?'white':'black');
@@ -624,19 +1012,19 @@ function renderBoard(){
       sq.appendChild(span);
     }
 
-    // File labels on bottom row
-    if(r===7){
+    // File labels on bottom row (display)
+    if(dr===7){
       const lbl=document.createElement('span');
       lbl.className='file-label';
-      lbl.textContent=FILES_LABELS[c];
+      lbl.textContent=FILES_LABELS[lc];
       lbl.style.cssText='position:absolute;bottom:1px;right:3px;';
       sq.appendChild(lbl);
     }
-    // Rank labels on left column
-    if(c===0){
+    // Rank labels on left column (display)
+    if(dc===0){
       const lbl=document.createElement('span');
       lbl.className='rank-label';
-      lbl.textContent=RANKS[r];
+      lbl.textContent=RANKS[lr];
       lbl.style.cssText='position:absolute;top:1px;left:2px;';
       sq.appendChild(lbl);
     }
@@ -816,17 +1204,34 @@ function getSquareAt(x,y){
 
 function executePlayerMove(move){
   const notation=board.notation(move);
+
+  // Snapshot board before move for sound decisions
+  const boardBefore = board.clone();
+  const wasInCheck = boardBefore.inCheck(boardBefore.whiteTurn);
+  const isCapture = move.type.startsWith('cap') || move.type === 'ep';
+  const isCastle = move.type === 'castleK' || move.type === 'castleQ';
+
   board.makeMove(move);
-  moveHistory.push([notation,board.whiteTurn]); // pushed BEFORE toggle, so use the current state
+  moveHistory.push([notation, !board.whiteTurn]);
   lastMove=move;
   selectedSq=null;
   legalForSelected=[];
-  moveHistory[moveHistory.length-1][1]=!board.whiteTurn; // fix: who just moved
 
+  // Play sounds
+  if(isCastle) playCastleSound();
+  else if(isCapture) playCaptureSound();
+  else playMoveSound();
+
+  // Animate piece then render
   renderBoard();
   updateSidebar();
+  animateMove(move, ()=>{ renderBoard(); });
 
-  if(checkGameOver()) return;
+  if(checkGameOver()){
+    if(board.isCheckmate()) playCheckmateSound();
+    return;
+  }
+  if(wasInCheck) playCheckSound();
 
   // AI turn
   aiThinking=true;
@@ -835,14 +1240,31 @@ function executePlayerMove(move){
     const aiMove=getBestMove(board);
     if(aiMove){
       const aiNotation=board.notation(aiMove);
+      const aiBoardBefore = board.clone();
+      const aiWasInCheck = aiBoardBefore.inCheck(aiBoardBefore.whiteTurn);
+      const aiIsCapture = aiMove.type.startsWith('cap') || aiMove.type === 'ep';
+      const aiIsCastle = aiMove.type === 'castleK' || aiMove.type === 'castleQ';
+
       board.makeMove(aiMove);
-      moveHistory.push([aiNotation,!board.whiteTurn]);
+      moveHistory.push([aiNotation, !board.whiteTurn]);
       lastMove=aiMove;
+
+      // Play AI sounds
+      if(aiIsCastle) playCastleSound();
+      else if(aiIsCapture) playCaptureSound();
+      else playMoveSound();
+
+      // Animate AI move then render
+      renderBoard();
+      animateMove(aiMove, ()=>{ renderBoard(); });
+      updateEvalBar(getEvalForBoard(board));
+
+      if(aiWasInCheck) setTimeout(playCheckSound, 100);
     }
     aiThinking=false;
     renderBoard();
     updateSidebar();
-    checkGameOver();
+    if(checkGameOver() && board.isCheckmate()) playCheckmateSound();
   }, 50);
 }
 
@@ -908,7 +1330,9 @@ function newGame(){
   gameOver=false;
   aiThinking=false;
   moveHistory=[];
+  lastEval=0;
   closeGameOver();
+  updateEvalBar(0);
   renderBoard();
   updateSidebar();
 }
@@ -937,6 +1361,7 @@ function undoMove(){
   gameOver=false;
   aiThinking=false;
   closeGameOver();
+  updateEvalBar(getEvalForBoard(board));
   renderBoard();
   updateSidebar();
 }
