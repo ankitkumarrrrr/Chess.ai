@@ -1,0 +1,8 @@
+.freebuff/
+__pycache__/
+*.pyc
+.DS_Store
+preview.png
+preview_small.png
+preview.html
+generate_preview.py
